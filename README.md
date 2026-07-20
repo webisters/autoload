@@ -18,7 +18,7 @@ composer require webisters/autoload
 
 ## Requirements
 - PHP: `>=8.2`
-- PHP extension: `ext-intl` (Intl — Internationalization extension)
+- PHP extension: `ext-intl` (Intl - Internationalization extension)
 - Composer: Compatible with Composer 2.x.
 
 ## Documentation
