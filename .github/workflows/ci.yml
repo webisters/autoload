@@ -48,7 +48,7 @@ jobs:
         with:
           php-version: '8.2'
           extensions: intl, sodium, gd, mysqli, curl, fileinfo, json, dom, simplexml, mbstring, zip, redis, memcached, apcu
-          coverage: none
+          coverage: pcov
           ini-values: apc.enable_cli=1
       - name: Validate composer.json
         run: composer validate --no-check-publish
@@ -72,7 +72,7 @@ jobs:
         with:
           php-version: '8.2'
           extensions: intl, sodium, gd, mysqli, curl, fileinfo, json, dom, simplexml, mbstring, zip
-          coverage: none
+          coverage: pcov
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
       - name: Coding standard (dry-run)
