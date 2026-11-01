@@ -263,6 +263,78 @@ final class PreloaderTest extends TestCase
         self::assertContains(__DIR__ . '/support/OneTrait.php', $files);
     }
 
+    public function testGetClassMapMapsNamesToAbsolutePaths() : void
+    {
+        $autoloader = new Autoloader();
+        $autoloader->setNamespace('Foo\Bar\Baz', __DIR__ . '/support');
+        $preloader = new Preloader($autoloader, null);
+        $classMap = $preloader->getClassMap();
+        self::assertArrayHasKey('Foo\Bar\Baz\OneEnum', $classMap);
+        self::assertArrayHasKey('Foo\Bar\Baz\OneTrait', $classMap);
+        self::assertSame(
+            \realpath(__DIR__ . '/support/OneEnum.php'),
+            $classMap['Foo\Bar\Baz\OneEnum']
+        );
+        foreach ($classMap as $file) {
+            self::assertFileExists($file);
+        }
+    }
+
+    public function testGetClassMapIsSortedByClassName() : void
+    {
+        $autoloader = new Autoloader();
+        $autoloader->setNamespace('Foo\Bar\Baz', __DIR__ . '/support');
+        $classMap = (new Preloader($autoloader, null))->getClassMap();
+        $sorted = \array_keys($classMap);
+        \sort($sorted);
+        self::assertSame($sorted, \array_keys($classMap));
+    }
+
+    public function testGetClassMapHonoursExcludes() : void
+    {
+        $autoloader = new Autoloader();
+        $autoloader->setNamespace('Foo\Bar\Baz', __DIR__ . '/support');
+        $preloader = new Preloader($autoloader, null);
+        $preloader->addExcludes('*/support/OneEnum.php');
+        $classMap = $preloader->getClassMap();
+        self::assertArrayNotHasKey('Foo\Bar\Baz\OneEnum', $classMap);
+        self::assertArrayHasKey('Foo\Bar\Baz\OneTrait', $classMap);
+    }
+
+    public function testExportedClassMapIsValidPhpThatLoadsBack() : void
+    {
+        $autoloader = new Autoloader();
+        $autoloader->setNamespace('Foo\Bar\Baz', __DIR__ . '/support');
+        $preloader = new Preloader($autoloader, null);
+        $file = \sys_get_temp_dir() . '/webisters-classmap-' . \getmypid() . '.php';
+        $count = $preloader->exportClassMap($file);
+        try {
+            self::assertFileExists($file);
+            self::assertSame($count, \count($preloader->getClassMap()));
+            $loaded = require $file;
+            self::assertSame($preloader->getClassMap(), $loaded);
+            // The map feeds an autoloader back without touching the filesystem.
+            $fresh = new Autoloader(false);
+            $fresh->setClasses($loaded, false);
+            self::assertSame(
+                \realpath(__DIR__ . '/support/OneTrait.php'),
+                $fresh->findClassPath('Foo\Bar\Baz\OneTrait')
+            );
+        } finally {
+            if (\is_file($file)) {
+                \unlink($file);
+            }
+        }
+    }
+
+    public function testExportClassMapThrowsWhenTheDirectoryIsMissing() : void
+    {
+        $preloader = new Preloader(packagesDir: null);
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Classmap directory not found');
+        $preloader->exportClassMap('/no/such/directory/classmap.php');
+    }
+
     public function testAllDeclarations() : void
     {
         self::assertContains(

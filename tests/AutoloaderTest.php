@@ -229,4 +229,26 @@ final class AutoloaderTest extends TestCase
         $this->autoloader->withConflictDetection(false);
         self::assertSame([], $this->autoloader->getConflicts());
     }
+
+    public function testSetClassesValidatesPathsByDefault() : void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Path is not a file');
+        $this->autoloader->setClasses(['Missing' => '/no/such/file.php']);
+    }
+
+    public function testSetClassesCanSkipValidationForAGeneratedMap() : void
+    {
+        $this->autoloader->setClasses(['Missing' => '/no/such/file.php'], false);
+        self::assertSame(
+            '/no/such/file.php',
+            $this->autoloader->getClass('Missing')
+        );
+    }
+
+    public function testUnvalidatedSetClassesStillTrimsClassNames() : void
+    {
+        $this->autoloader->setClasses(['\Lead\Slash' => '/some/file.php'], false);
+        self::assertSame('/some/file.php', $this->autoloader->getClass('Lead\Slash'));
+    }
 }
