@@ -387,15 +387,31 @@ class Autoloader
     /**
      * Sets classes mapping for file paths.
      *
+     * Each path is resolved with realpath() and checked with is_file(), which
+     * costs one stat per class. When loading a generated classmap in
+     * production that cost is the very thing the classmap exists to avoid, so
+     * pass $validate as false to assign the paths as given. Only do that for a
+     * map produced by Preloader::exportClassMap(), whose paths are already
+     * canonical and absolute.
+     *
      * @param array<string,string> $classes Associative array with class names
      * as keys and file paths as values
+     * @param bool $validate Whether to resolve and check each path
+     *
+     * @see Preloader::exportClassMap()
      *
      * @return static
      */
-    public function setClasses(array $classes) : static
+    public function setClasses(array $classes, bool $validate = true) : static
     {
+        if ($validate) {
+            foreach ($classes as $name => $filepath) {
+                $this->setClass($name, $filepath);
+            }
+            return $this;
+        }
         foreach ($classes as $name => $filepath) {
-            $this->setClass($name, $filepath);
+            $this->classes[$this->renderRealName($name)] = $filepath;
         }
         return $this;
     }
