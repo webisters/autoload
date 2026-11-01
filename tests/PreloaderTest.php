@@ -204,6 +204,65 @@ final class PreloaderTest extends TestCase
         );
     }
 
+    public function testExcludesDefaultsToEmpty() : void
+    {
+        self::assertSame([], (new Preloader(packagesDir: null))->getExcludes());
+    }
+
+    public function testSetExcludesReplacesAndAddExcludesAppends() : void
+    {
+        $preloader = new Preloader(packagesDir: null);
+        self::assertSame(
+            ['*/a.php'],
+            $preloader->setExcludes(['*/a.php'])->getExcludes()
+        );
+        self::assertSame(
+            ['*/a.php', '*/b.php', '*/c.php'],
+            $preloader->addExcludes('*/b.php', '*/c.php')->getExcludes()
+        );
+        self::assertSame(
+            ['*/d.php'],
+            $preloader->setExcludes(['*/d.php'])->getExcludes()
+        );
+    }
+
+    public function testExcludedPackagesFilesAreNotListedOrRegistered() : void
+    {
+        $dir = __DIR__ . '/../vendor/webisters';
+        $debugger = \realpath($dir . '/debug/src/Debugger.php');
+        $preloader = new Preloader(packagesDir: $dir);
+        self::assertContains($debugger, $preloader->listPackagesFiles());
+        $excluding = new Preloader(packagesDir: $dir);
+        $excluding->addExcludes('*/debug/src/Debugger.php');
+        self::assertNotContains($debugger, $excluding->listPackagesFiles());
+        self::assertArrayNotHasKey(
+            \Framework\Debug\Debugger::class,
+            $excluding->getAutoloader()->getClasses()
+        );
+    }
+
+    public function testExcludeKeepsAMappedClassOutOfThePreload() : void
+    {
+        $file = __DIR__ . '/preload/PlainClass.php';
+        $autoloader = new Autoloader();
+        $autoloader->setClass(PlainClass::class, $file);
+        $preloader = new Preloader($autoloader, null);
+        $preloader->addExcludes('*/preload/PlainClass.php');
+        self::assertNotContains(\realpath($file), $preloader->listFiles());
+        self::assertSame([], $preloader->load());
+    }
+
+    public function testExcludeAppliesToNamespaceScans() : void
+    {
+        $autoloader = new Autoloader();
+        $autoloader->setNamespace('Foo\Bar\Baz', __DIR__ . '/support');
+        $preloader = new Preloader($autoloader, null);
+        $preloader->addExcludes('*/support/OneEnum.php');
+        $files = $preloader->listFiles();
+        self::assertNotContains(__DIR__ . '/support/OneEnum.php', $files);
+        self::assertContains(__DIR__ . '/support/OneTrait.php', $files);
+    }
+
     public function testAllDeclarations() : void
     {
         self::assertContains(
