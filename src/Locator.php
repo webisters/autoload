@@ -22,6 +22,13 @@ use JetBrains\PhpStorm\Pure;
 class Locator
 {
     protected Autoloader $autoloader;
+    protected bool $classNameCache = false;
+    /**
+     * Parsed class names, keyed by file path and modification time.
+     *
+     * @var array<string,string|null>
+     */
+    protected array $classNames = [];
 
     /**
      * Locator constructor.
@@ -40,8 +47,12 @@ class Locator
      * enum. Anonymous classes are skipped, since they have no name to return,
      * and so is the ::class constant, which is not a declaration.
      *
+     * Results are tokenized on every call unless the in-memory cache is
+     * enabled with withClassNameCache().
+     *
      * @param string $filename
      *
+     * @see Locator::withClassNameCache()
      * @see https://www.php.net/manual/en/language.namespaces.rules.php
      * @see https://www.php.net/manual/en/language.oop5.interfaces.php
      *
@@ -52,6 +63,68 @@ class Locator
         if (!\is_file($filename)) {
             return null;
         }
+        if (!$this->classNameCache) {
+            return $this->parseClassName($filename);
+        }
+        $key = $filename . ':' . (string) \filemtime($filename);
+        if (!\array_key_exists($key, $this->classNames)) {
+            $this->classNames[$key] = $this->parseClassName($filename);
+        }
+        return $this->classNames[$key];
+    }
+
+    /**
+     * Enable or disable the in-memory class name cache.
+     *
+     * The cache is off by default. Turn it on for tools that call
+     * getClassName() over many files, such as the Preloader or a classmap
+     * generator, where the same file is tokenized more than once. Entries are
+     * keyed by file path and modification time, so editing a file invalidates
+     * its entry on the next call.
+     *
+     * @param bool $enabled
+     *
+     * @return static
+     */
+    public function withClassNameCache(bool $enabled = true) : static
+    {
+        $this->classNameCache = $enabled;
+        if (!$enabled) {
+            $this->classNames = [];
+        }
+        return $this;
+    }
+
+    /**
+     * Tell whether the in-memory class name cache is enabled.
+     *
+     * @return bool
+     */
+    public function isCachingClassNames() : bool
+    {
+        return $this->classNameCache;
+    }
+
+    /**
+     * Discard every cached class name, keeping the cache enabled.
+     *
+     * @return static
+     */
+    public function clearClassNameCache() : static
+    {
+        $this->classNames = [];
+        return $this;
+    }
+
+    /**
+     * Tokenizes a file and returns the first declared name.
+     *
+     * @param string $filename
+     *
+     * @return string|null The class name or null if not found
+     */
+    protected function parseClassName(string $filename) : ?string
+    {
         $tokens = \token_get_all((string) \file_get_contents($filename));
         $last = \count($tokens);
         $namespace = '';

@@ -142,6 +142,80 @@ final class LocatorTest extends TestCase
         self::assertNull($this->locator->getClassName(__DIR__));
     }
 
+    public function testClassNameCacheIsOffByDefault() : void
+    {
+        self::assertFalse($this->locator->isCachingClassNames());
+    }
+
+    public function testWithClassNameCacheTogglesTheFlag() : void
+    {
+        self::assertTrue($this->locator->withClassNameCache()->isCachingClassNames());
+        self::assertFalse($this->locator->withClassNameCache(false)->isCachingClassNames());
+    }
+
+    public function testCachedLookupsMatchUncachedOnes() : void
+    {
+        $file = $this->snippet("<?php\nnamespace Probe;\nclass Cached {}\n");
+        $uncached = $this->locator->getClassName($file);
+        $this->locator->withClassNameCache();
+        self::assertSame($uncached, $this->locator->getClassName($file));
+        // Second call comes from the cache.
+        self::assertSame($uncached, $this->locator->getClassName($file));
+    }
+
+    public function testCacheRemembersAMissingDeclarationToo() : void
+    {
+        $file = $this->snippet("<?php\n\\var_dump('nothing here');\n");
+        $this->locator->withClassNameCache();
+        self::assertNull($this->locator->getClassName($file));
+        self::assertNull($this->locator->getClassName($file));
+    }
+
+    public function testCacheIsInvalidatedWhenTheFileChanges() : void
+    {
+        $file = $this->snippet("<?php\nnamespace Probe;\nclass Before {}\n");
+        $this->locator->withClassNameCache();
+        self::assertSame('Probe\Before', $this->locator->getClassName($file));
+        \file_put_contents($file, "<?php\nnamespace Probe;\nclass After {}\n");
+        // Force a distinct mtime, which has one-second resolution.
+        \touch($file, \time() + 10);
+        \clearstatcache(true, $file);
+        self::assertSame('Probe\After', $this->locator->getClassName($file));
+    }
+
+    public function testStaleResultIsReturnedWhenTheCacheIsNotInvalidated() : void
+    {
+        $file = $this->snippet("<?php\nnamespace Probe;\nclass Pinned {}\n");
+        $this->locator->withClassNameCache();
+        self::assertSame('Probe\Pinned', $this->locator->getClassName($file));
+        $mtime = (int) \filemtime($file);
+        \file_put_contents($file, "<?php\nnamespace Probe;\nclass Changed {}\n");
+        // Same mtime, so the entry stays valid by design.
+        \touch($file, $mtime);
+        \clearstatcache(true, $file);
+        self::assertSame('Probe\Pinned', $this->locator->getClassName($file));
+        // Clearing the cache picks the new declaration up.
+        self::assertSame(
+            'Probe\Changed',
+            $this->locator->clearClassNameCache()->getClassName($file)
+        );
+    }
+
+    public function testDisablingTheCacheDiscardsIt() : void
+    {
+        $file = $this->snippet("<?php\nnamespace Probe;\nclass Dropped {}\n");
+        $this->locator->withClassNameCache();
+        self::assertSame('Probe\Dropped', $this->locator->getClassName($file));
+        $mtime = (int) \filemtime($file);
+        \file_put_contents($file, "<?php\nnamespace Probe;\nclass Replaced {}\n");
+        \touch($file, $mtime);
+        \clearstatcache(true, $file);
+        self::assertSame(
+            'Probe\Replaced',
+            $this->locator->withClassNameCache(false)->getClassName($file)
+        );
+    }
+
     public function testGetFiles() : void
     {
         $this->autoloader->setNamespace('Autoload', __DIR__ . '/..');
