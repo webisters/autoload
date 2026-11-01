@@ -1,0 +1,17 @@
+parameters:
+    level: 6
+    paths:
+        - src
+        - tests
+    excludePaths:
+        analyse:
+            # Fixtures that deliberately reference an uninstalled interface, to
+            # prove Preloader::load() skips such a file instead of aborting.
+            - tests/Preload
+    ignoreErrors:
+        # Assertions in tests often compare against a literal that PHPStan has
+        # already narrowed from an earlier assertion. The check is still worth
+        # making at run time.
+        -
+            identifier: staticMethod.alreadyNarrowedType
+            path: tests/*

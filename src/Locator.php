@@ -190,7 +190,6 @@ class Locator
             ], true)) {
                 continue;
             }
-            // @phpstan-ignore-next-line
             return (int) $token[0];
         }
         return null;

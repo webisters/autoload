@@ -129,7 +129,7 @@ class AutoloadCollector extends Collector
             </tbody>
         </table>
         <?php
-        return \ob_get_clean(); // @phpstan-ignore-line
+        return \ob_get_clean();
     }
 
     /**
@@ -173,7 +173,7 @@ class AutoloadCollector extends Collector
         <h2>Classes</h2>
         <?php
         echo $this->renderClasses();
-        return \ob_get_clean(); // @phpstan-ignore-line
+        return \ob_get_clean();
     }
 
     protected function renderNamespaces() : string
@@ -207,7 +207,7 @@ class AutoloadCollector extends Collector
             </tbody>
         </table>
         <?php
-        return \ob_get_clean(); // @phpstan-ignore-line
+        return \ob_get_clean();
     }
 
     protected function renderClasses() : string
@@ -235,7 +235,7 @@ class AutoloadCollector extends Collector
             </tbody>
         </table>
         <?php
-        return \ob_get_clean(); // @phpstan-ignore-line
+        return \ob_get_clean();
     }
 
     protected function renderPreload() : string

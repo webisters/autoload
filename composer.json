@@ -38,9 +38,10 @@
         "webisters/debug": "*"
     },
     "require-dev": {
-        "webisters/coding-standard": "*",
         "jetbrains/phpstorm-attributes": "^1.0",
-        "phpunit/phpunit": "^10.5"
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^10.5",
+        "webisters/coding-standard": "*"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
@@ -58,7 +59,10 @@
         "optimize-autoloader": true,
         "preferred-install": "dist",
         "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "lint": "php-cs-fixer fix --dry-run --diff",
+        "phpstan": "phpstan analyse"
     }
 }
-
-

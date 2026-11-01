@@ -141,14 +141,16 @@ final class PreloaderTest extends TestCase
     }
 
     /**
-     * @return array<int,string>
+     * @param string $name
+     *
+     * @return array{0:Preloader,1:string} The preloader and the fixture path
      */
     private function preloadFixture(string $name) : array
     {
-        $file = __DIR__ . '/preload/' . $name . '.php';
+        $file = __DIR__ . '/Preload/' . $name . '.php';
         $autoloader = new Autoloader();
         $autoloader->setClass('Tests\Autoload\Preload\\' . $name, $file);
-        $autoloader->setClass(PlainClass::class, __DIR__ . '/preload/PlainClass.php');
+        $autoloader->setClass(PlainClass::class, __DIR__ . '/Preload/PlainClass.php');
         $preloader = new Preloader($autoloader, null);
         return [$preloader, (string) \realpath($file)];
     }
@@ -159,7 +161,7 @@ final class PreloaderTest extends TestCase
         $loaded = $preloader->load();
         self::assertNotContains($broken, $loaded);
         self::assertContains(
-            \realpath(__DIR__ . '/preload/PlainClass.php'),
+            \realpath(__DIR__ . '/Preload/PlainClass.php'),
             $loaded
         );
         $failed = $preloader->getFailedFiles();
@@ -243,11 +245,11 @@ final class PreloaderTest extends TestCase
 
     public function testExcludeKeepsAMappedClassOutOfThePreload() : void
     {
-        $file = __DIR__ . '/preload/PlainClass.php';
+        $file = __DIR__ . '/Preload/PlainClass.php';
         $autoloader = new Autoloader();
         $autoloader->setClass(PlainClass::class, $file);
         $preloader = new Preloader($autoloader, null);
-        $preloader->addExcludes('*/preload/PlainClass.php');
+        $preloader->addExcludes('*/Preload/PlainClass.php');
         self::assertNotContains(\realpath($file), $preloader->listFiles());
         self::assertSame([], $preloader->load());
     }
