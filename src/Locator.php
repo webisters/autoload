@@ -36,7 +36,9 @@ class Locator
     /**
      * Gets the first Qualified Class Name in a given filename.
      *
-     * The "class name" can be the name of a class, an interface or a trait.
+     * The "class name" can be the name of a class, an interface, a trait or an
+     * enum. Anonymous classes are skipped, since they have no name to return,
+     * and so is the ::class constant, which is not a declaration.
      *
      * @param string $filename
      *
@@ -53,11 +55,15 @@ class Locator
         $tokens = \token_get_all((string) \file_get_contents($filename));
         $last = \count($tokens);
         $namespace = '';
-        $class = '';
         foreach ($tokens as $current => $token) {
+            if (!\is_array($token)) {
+                continue;
+            }
             if ($token[0] === \T_NAMESPACE) {
                 for ($next = $current + 1; $next < $last; $next++) {
-                    if ($tokens[$next][0] === \T_STRING || $tokens[$next][0] === \T_NAME_QUALIFIED) {
+                    if ($tokens[$next][0] === \T_STRING
+                        || $tokens[$next][0] === \T_NAME_QUALIFIED
+                    ) {
                         $namespace .= '\\' . $tokens[$next][1];
                     } elseif ($tokens[$next] === '{' || $tokens[$next] === ';') {
                         break;
@@ -65,25 +71,85 @@ class Locator
                 }
                 continue;
             }
-            if ($token[0] === \T_RETURN) {
-                return null;
-            }
-            if (\in_array($token[0], [
+            if (!\in_array($token[0], [
                 \T_CLASS,
                 \T_ENUM,
                 \T_INTERFACE,
                 \T_TRAIT,
             ], true)) {
-                for ($next = $current + 1; $next < $last; $next++) {
-                    if ($tokens[$next] === '{') {
-                        $token = $tokens[$current + 2];
-                        $class = $namespace . '\\' . $token[1];
-                        break 2;
-                    }
-                }
+                continue;
             }
+            // The ::class constant also yields a T_CLASS token.
+            if ($this->getPreviousTokenId($tokens, $current) === \T_DOUBLE_COLON) {
+                continue;
+            }
+            // An anonymous class is followed by '{', '(' or extends/implements
+            // rather than by its name, so there is nothing to return for it.
+            $name = $this->getDeclarationName($tokens, $current, $last);
+            if ($name === null) {
+                continue;
+            }
+            return \ltrim($namespace . '\\' . $name, '\\');
         }
-        return $class ? \ltrim($class, '\\') : null;
+        return null;
+    }
+
+    /**
+     * Gets the id of the meaningful token before a given position, skipping
+     * whitespace and comments.
+     *
+     * @param array<int,array<int,int|string>|string> $tokens
+     * @param int $current
+     *
+     * @return int|null The token id or null if there is none or it has no id
+     */
+    protected function getPreviousTokenId(array $tokens, int $current) : ?int
+    {
+        for ($previous = $current - 1; $previous >= 0; $previous--) {
+            $token = $tokens[$previous];
+            if (!\is_array($token)) {
+                return null;
+            }
+            if (\in_array($token[0], [
+                \T_WHITESPACE,
+                \T_COMMENT,
+                \T_DOC_COMMENT,
+            ], true)) {
+                continue;
+            }
+            // @phpstan-ignore-next-line
+            return (int) $token[0];
+        }
+        return null;
+    }
+
+    /**
+     * Gets the name declared after a class, interface, trait or enum keyword.
+     *
+     * @param array<int,array<int,int|string>|string> $tokens
+     * @param int $current Position of the keyword
+     * @param int $last Total number of tokens
+     *
+     * @return string|null The declared name or null when the declaration is
+     * anonymous or malformed
+     */
+    protected function getDeclarationName(array $tokens, int $current, int $last) : ?string
+    {
+        for ($next = $current + 1; $next < $last; $next++) {
+            $token = $tokens[$next];
+            if (!\is_array($token)) {
+                return null;
+            }
+            if (\in_array($token[0], [
+                \T_WHITESPACE,
+                \T_COMMENT,
+                \T_DOC_COMMENT,
+            ], true)) {
+                continue;
+            }
+            return $token[0] === \T_STRING ? (string) $token[1] : null;
+        }
+        return null;
     }
 
     /**
