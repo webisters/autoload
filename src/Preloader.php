@@ -27,6 +27,8 @@ class Preloader
     /**
      * The main 'webisters' packages directory.
      *
+     * @see Preloader::__construct() for how the default is resolved
+     *
      * @var string
      */
     protected string $packagesDir;
@@ -53,6 +55,16 @@ class Preloader
 
     /**
      * Preloader constructor.
+     *
+     * The default $packagesDir is the directory two levels above src, which is
+     * where the sibling 'webisters' packages sit in both supported layouts:
+     *
+     * - Composer install: vendor/webisters/autoload/src resolves to
+     *   vendor/webisters
+     * - Monorepo checkout: libraries/autoload/src resolves to libraries
+     *
+     * Pass an explicit path for any other layout, or null to disable packages
+     * loading entirely.
      *
      * @param Autoloader|null $autoloader A custom Autoloader instance or null
      * to auto initialize a new

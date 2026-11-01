@@ -186,9 +186,21 @@ final class PreloaderTest extends TestCase
     public function testDefaultPackagesDirResolvesTwoLevelsAboveSrc() : void
     {
         $preloader = new Preloader();
+        $packagesDir = $preloader->getPackagesDir();
         self::assertSame(
             \realpath(__DIR__ . '/../../') . \DIRECTORY_SEPARATOR,
-            $preloader->getPackagesDir()
+            $packagesDir
+        );
+        // The resolved directory must be the one holding the sibling packages,
+        // i.e. vendor/webisters on a Composer install and libraries on a
+        // monorepo checkout. In both cases this package is a child of it.
+        self::assertDirectoryExists($packagesDir);
+        self::assertDirectoryExists(
+            $packagesDir . \basename(\dirname(__DIR__))
+        );
+        self::assertFileExists(
+            $packagesDir . \basename(\dirname(__DIR__))
+            . \DIRECTORY_SEPARATOR . 'composer.json'
         );
     }
 
