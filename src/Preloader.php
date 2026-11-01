@@ -9,6 +9,7 @@
  */
 namespace Framework\Autoload;
 
+use Error;
 use InvalidArgumentException;
 
 require_once __DIR__ . '/Autoloader.php';
@@ -25,6 +26,8 @@ class Preloader
 {
     /**
      * The main 'webisters' packages directory.
+     *
+     * @see Preloader::__construct() for how the default is resolved
      *
      * @var string
      */
@@ -43,9 +46,31 @@ class Preloader
      * @var Locator
      */
     protected Locator $locator;
+    /**
+     * Files that could not be loaded, as file paths to error messages.
+     *
+     * @var array<string,string>
+     */
+    protected array $failedFiles = [];
+    /**
+     * Glob patterns of files to keep out of the preload.
+     *
+     * @var array<int,string>
+     */
+    protected array $excludes = [];
 
     /**
      * Preloader constructor.
+     *
+     * The default $packagesDir is the directory two levels above src, which is
+     * where the sibling 'webisters' packages sit in both supported layouts:
+     *
+     * - Composer install: vendor/webisters/autoload/src resolves to
+     *   vendor/webisters
+     * - Monorepo checkout: libraries/autoload/src resolves to libraries
+     *
+     * Pass an explicit path for any other layout, or null to disable packages
+     * loading entirely.
      *
      * @param Autoloader|null $autoloader A custom Autoloader instance or null
      * to auto initialize a new
@@ -102,6 +127,72 @@ class Preloader
     }
 
     /**
+     * Set the glob patterns of files to keep out of the preload, replacing any
+     * patterns set before.
+     *
+     * Patterns are matched against the absolute file path with fnmatch(), where
+     * "*" also matches directory separators. Use this for files that must not
+     * be required ahead of time, typically because they have side effects.
+     *
+     * @param array<int,string> $patterns Glob patterns
+     *
+     * @see Preloader::isExcluded()
+     *
+     * @return static
+     */
+    public function setExcludes(array $patterns) : static
+    {
+        $this->excludes = \array_values($patterns);
+        return $this;
+    }
+
+    /**
+     * Add glob patterns of files to keep out of the preload.
+     *
+     * @param string ...$patterns Glob patterns
+     *
+     * @see Preloader::setExcludes()
+     *
+     * @return static
+     */
+    public function addExcludes(string ...$patterns) : static
+    {
+        foreach ($patterns as $pattern) {
+            $this->excludes[] = $pattern;
+        }
+        return $this;
+    }
+
+    /**
+     * Get the glob patterns of files kept out of the preload.
+     *
+     * @return array<int,string>
+     */
+    public function getExcludes() : array
+    {
+        return $this->excludes;
+    }
+
+    /**
+     * Tell whether a file matches any of the exclude patterns.
+     *
+     * @param string $file Absolute file path
+     *
+     * @see Preloader::setExcludes()
+     *
+     * @return bool
+     */
+    protected function isExcluded(string $file) : bool
+    {
+        foreach ($this->excludes as $pattern) {
+            if (\fnmatch($pattern, $file)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * @param bool $setClasses
      *
      * @return array<int,string>
@@ -110,7 +201,7 @@ class Preloader
     {
         $result = [];
         foreach ($this->getLocator()->listFiles($this->getPackagesDir()) as $file) {
-            if (!\str_ends_with($file, '.php')) {
+            if (!\str_ends_with($file, '.php') || $this->isExcluded($file)) {
                 continue;
             }
             $className = $this->getLocator()->getClassName($file);
@@ -146,13 +237,16 @@ class Preloader
     {
         $result = [];
         foreach ($this->getAutoloader()->getClasses() as $file) {
+            if ($this->isExcluded($file)) {
+                continue;
+            }
             $result[] = $file;
         }
         foreach ($this->getAutoloader()->getNamespaces() as $namespace => $directories) {
             foreach ($directories as $directory) {
                 $files = $this->getLocator()->listFiles($directory);
                 foreach ($files as $file) {
-                    if (!\str_ends_with($file, '.php')) {
+                    if (!\str_ends_with($file, '.php') || $this->isExcluded($file)) {
                         continue;
                     }
                     $className = $this->getLocator()->getClassName($file);
@@ -178,18 +272,52 @@ class Preloader
     /**
      * Load files to be seen by the PHP OPcache Preloading when the engine starts.
      *
+     * A class may reference a type that comes from an optional dependency, i.e.
+     * a package listed only under "suggest" or "require-dev". Requiring such a
+     * file raises a catchable Error, which would otherwise abort the whole
+     * preload. By default those files are skipped and recorded in
+     * Preloader::getFailedFiles() so the caller can report them.
+     *
+     * @param bool $tolerant Whether to skip files that raise an Error instead
+     * of letting it abort the preload
+     *
+     * @see Preloader::getFailedFiles()
+     *
+     * @throws Error if $tolerant is false and a file cannot be loaded
+     *
      * @return array<int,string> The loaded files
      */
-    public function load() : array
+    public function load(bool $tolerant = true) : array
     {
+        $this->failedFiles = [];
         $loadedFiles = [];
         foreach ($this->listFiles() as $file) {
-            (static function () use ($file) : void {
-                require_once $file;
-            })();
+            try {
+                (static function () use ($file) : void {
+                    require_once $file;
+                })();
+            } catch (Error $error) {
+                if (!$tolerant) {
+                    throw $error;
+                }
+                $this->failedFiles[$file] = $error->getMessage();
+                continue;
+            }
             $loadedFiles[] = $file;
         }
         return $loadedFiles;
+    }
+
+    /**
+     * Get the files that the last call to Preloader::load() could not load.
+     *
+     * @see Preloader::load()
+     *
+     * @return array<string,string> File paths as keys and error messages as values
+     */
+    public function getFailedFiles() : array
+    {
+        return $this->failedFiles;
     }
 
     /**
