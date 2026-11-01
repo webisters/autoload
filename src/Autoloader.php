@@ -37,6 +37,17 @@ class Autoloader
      */
     protected array $namespaces = [];
     protected AutoloadCollector $debugCollector;
+    protected bool $detectConflicts = false;
+    /**
+     * Registration conflicts seen so far.
+     *
+     * @var array<int,array<string,string>>
+     */
+    protected array $conflicts = [];
+    /**
+     * @var callable|null
+     */
+    protected $conflictHandler;
 
     /**
      * Autoloader constructor.
@@ -85,6 +96,105 @@ class Autoloader
     }
 
     /**
+     * Enable or disable detection of conflicting registrations.
+     *
+     * Registering a namespace prefix or a class twice is silent by default:
+     * the later call simply wins. That is the intended behaviour for
+     * overrides, but it also hides an accidental setNamespace() where
+     * addNamespace() was meant, which is hard to track down because the
+     * symptom is a class loading from the wrong directory.
+     *
+     * With detection on, each conflict is recorded in getConflicts() and, when
+     * a handler is given, passed to it as it happens. Nothing is thrown and no
+     * registration is refused, so turning this on cannot change which file a
+     * class loads from.
+     *
+     * Each conflict is an array with the keys "type", one of "namespace",
+     * "namespace-directory" or "class", "name", "previous" and "current".
+     *
+     * @param bool $enabled
+     * @param callable|null $handler Receives each conflict as an
+     * array<string,string>, for logging
+     *
+     * @see Autoloader::getConflicts()
+     *
+     * @return static
+     */
+    public function withConflictDetection(bool $enabled = true, ?callable $handler = null) : static
+    {
+        $this->detectConflicts = $enabled;
+        $this->conflictHandler = $enabled ? $handler : null;
+        if (!$enabled) {
+            $this->conflicts = [];
+        }
+        return $this;
+    }
+
+    /**
+     * Tell whether conflict detection is enabled.
+     *
+     * @return bool
+     */
+    public function isDetectingConflicts() : bool
+    {
+        return $this->detectConflicts;
+    }
+
+    /**
+     * Get the registration conflicts recorded so far.
+     *
+     * @see Autoloader::withConflictDetection()
+     *
+     * @return array<int,array<string,string>>
+     */
+    public function getConflicts() : array
+    {
+        return $this->conflicts;
+    }
+
+    /**
+     * Discard the recorded conflicts, keeping detection enabled.
+     *
+     * @return static
+     */
+    public function clearConflicts() : static
+    {
+        $this->conflicts = [];
+        return $this;
+    }
+
+    /**
+     * Record one conflict, if detection is enabled.
+     *
+     * @param string $type One of "namespace", "namespace-directory" or "class"
+     * @param string $name The namespace or class name involved
+     * @param string $previous What was registered before
+     * @param string $current What is replacing or duplicating it
+     *
+     * @return void
+     */
+    protected function addConflict(
+        string $type,
+        string $name,
+        string $previous,
+        string $current
+    ) : void {
+        if (!$this->detectConflicts) {
+            return;
+        }
+        $conflict = [
+            'type' => $type,
+            'name' => $name,
+            'previous' => $previous,
+            'current' => $current,
+        ];
+        $this->conflicts[] = $conflict;
+        if ($this->conflictHandler !== null) {
+            ($this->conflictHandler)($conflict);
+        }
+    }
+
+    /**
      * Sets one namespace mapping for a directory path.
      *
      * @param string $namespace Namespace name
@@ -96,7 +206,19 @@ class Autoloader
     {
         $directories = $this->makeRenderedDirectoryPaths((array) $dir);
         if ($directories) {
-            $this->namespaces[$this->renderRealName($namespace)] = $directories;
+            $name = $this->renderRealName($namespace);
+            if ($this->detectConflicts
+                && isset($this->namespaces[$name])
+                && $this->namespaces[$name] !== $directories
+            ) {
+                $this->addConflict(
+                    'namespace',
+                    $name,
+                    \implode(', ', $this->namespaces[$name]),
+                    \implode(', ', $directories)
+                );
+            }
+            $this->namespaces[$name] = $directories;
             $this->sortNamespaces();
         }
         return $this;
@@ -130,6 +252,18 @@ class Autoloader
         if ($directories) {
             $name = $this->renderRealName($namespace);
             if (isset($this->namespaces[$name])) {
+                if ($this->detectConflicts) {
+                    foreach ($directories as $directory) {
+                        if (\in_array($directory, $this->namespaces[$name], true)) {
+                            $this->addConflict(
+                                'namespace-directory',
+                                $name,
+                                \implode(', ', $this->namespaces[$name]),
+                                $directory
+                            );
+                        }
+                    }
+                }
                 $directories = [...$this->namespaces[$name], ...$directories];
             }
             $this->namespaces[$name] = $directories;
@@ -238,7 +372,15 @@ class Autoloader
      */
     public function setClass(string $name, string $filepath) : static
     {
-        $this->classes[$this->renderRealName($name)] = $this->renderFilePath($filepath);
+        $class = $this->renderRealName($name);
+        $path = $this->renderFilePath($filepath);
+        if ($this->detectConflicts
+            && isset($this->classes[$class])
+            && $this->classes[$class] !== $path
+        ) {
+            $this->addConflict('class', $class, $this->classes[$class], $path);
+        }
+        $this->classes[$class] = $path;
         return $this;
     }
 
