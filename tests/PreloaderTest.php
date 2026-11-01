@@ -12,6 +12,7 @@ namespace Tests\Autoload;
 use Framework\Autoload\Autoloader;
 use Framework\Autoload\Preloader;
 use PHPUnit\Framework\TestCase;
+use Tests\Autoload\Preload\PlainClass;
 
 final class PreloaderTest extends TestCase
 {
@@ -136,6 +137,58 @@ final class PreloaderTest extends TestCase
         self::assertContains(
             __DIR__ . '/support/OneClass.php',
             $preloader->load()
+        );
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    private function preloadFixture(string $name) : array
+    {
+        $file = __DIR__ . '/preload/' . $name . '.php';
+        $autoloader = new Autoloader();
+        $autoloader->setClass('Tests\Autoload\Preload\\' . $name, $file);
+        $autoloader->setClass(PlainClass::class, __DIR__ . '/preload/PlainClass.php');
+        $preloader = new Preloader($autoloader, null);
+        return [$preloader, (string) \realpath($file)];
+    }
+
+    public function testLoadSkipsFileWithMissingOptionalDependency() : void
+    {
+        [$preloader, $broken] = $this->preloadFixture('MissingDependencyOne');
+        $loaded = $preloader->load();
+        self::assertNotContains($broken, $loaded);
+        self::assertContains(
+            \realpath(__DIR__ . '/preload/PlainClass.php'),
+            $loaded
+        );
+        $failed = $preloader->getFailedFiles();
+        self::assertArrayHasKey($broken, $failed);
+        self::assertStringContainsString('MissingInterfaceOne', $failed[$broken]);
+    }
+
+    public function testLoadRethrowsWhenNotTolerant() : void
+    {
+        [$preloader] = $this->preloadFixture('MissingDependencyTwo');
+        $this->expectException(\Error::class);
+        $this->expectExceptionMessage('MissingInterfaceTwo');
+        $preloader->load(false);
+    }
+
+    public function testFailedFilesIsEmptyBeforeAndAfterACleanLoad() : void
+    {
+        $preloader = new Preloader(packagesDir: __DIR__ . '/support');
+        self::assertSame([], $preloader->getFailedFiles());
+        $preloader->load();
+        self::assertSame([], $preloader->getFailedFiles());
+    }
+
+    public function testDefaultPackagesDirResolvesTwoLevelsAboveSrc() : void
+    {
+        $preloader = new Preloader();
+        self::assertSame(
+            \realpath(__DIR__ . '/../../') . \DIRECTORY_SEPARATOR,
+            $preloader->getPackagesDir()
         );
     }
 
