@@ -112,4 +112,121 @@ final class AutoloaderTest extends TestCase
     {
         self::assertTrue($this->autoloader->unregister());
     }
+
+    public function testConflictDetectionIsOffByDefault() : void
+    {
+        self::assertFalse($this->autoloader->isDetectingConflicts());
+        $this->autoloader->setNamespace('Dup', __DIR__);
+        $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
+        self::assertSame([], $this->autoloader->getConflicts());
+    }
+
+    public function testWithConflictDetectionTogglesTheFlag() : void
+    {
+        self::assertTrue(
+            $this->autoloader->withConflictDetection()->isDetectingConflicts()
+        );
+        self::assertFalse(
+            $this->autoloader->withConflictDetection(false)->isDetectingConflicts()
+        );
+    }
+
+    public function testSetNamespaceTwiceIsReportedAsAConflict() : void
+    {
+        $this->autoloader->withConflictDetection();
+        $this->autoloader->setNamespace('Dup', __DIR__);
+        self::assertSame([], $this->autoloader->getConflicts());
+        $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
+        $conflicts = $this->autoloader->getConflicts();
+        self::assertCount(1, $conflicts);
+        self::assertSame('namespace', $conflicts[0]['type']);
+        self::assertSame('Dup', $conflicts[0]['name']);
+        self::assertStringContainsString('tests', $conflicts[0]['previous']);
+        self::assertStringContainsString('support', $conflicts[0]['current']);
+        // The later registration still wins; detection changes nothing.
+        self::assertSame(
+            [\realpath(__DIR__ . '/support') . \DIRECTORY_SEPARATOR],
+            $this->autoloader->getNamespace('Dup')
+        );
+    }
+
+    public function testSetNamespaceWithTheSameDirectoryIsNotAConflict() : void
+    {
+        $this->autoloader->withConflictDetection();
+        $this->autoloader->setNamespace('Same', __DIR__);
+        $this->autoloader->setNamespace('Same', __DIR__);
+        self::assertSame([], $this->autoloader->getConflicts());
+    }
+
+    public function testAddNamespaceWithADuplicateDirectoryIsReported() : void
+    {
+        $this->autoloader->withConflictDetection();
+        $this->autoloader->addNamespace('Dup', __DIR__);
+        $this->autoloader->addNamespace('Dup', __DIR__ . '/support');
+        self::assertSame([], $this->autoloader->getConflicts());
+        $this->autoloader->addNamespace('Dup', __DIR__);
+        $conflicts = $this->autoloader->getConflicts();
+        self::assertCount(1, $conflicts);
+        self::assertSame('namespace-directory', $conflicts[0]['type']);
+        self::assertSame('Dup', $conflicts[0]['name']);
+    }
+
+    public function testSetClassTwiceIsReportedAsAConflict() : void
+    {
+        $this->autoloader->withConflictDetection();
+        $this->autoloader->setClass('Dup', __DIR__ . '/support/OneClass.php');
+        self::assertSame([], $this->autoloader->getConflicts());
+        $this->autoloader->setClass('Dup', __DIR__ . '/support/OneInterface.php');
+        $conflicts = $this->autoloader->getConflicts();
+        self::assertCount(1, $conflicts);
+        self::assertSame('class', $conflicts[0]['type']);
+        self::assertSame('Dup', $conflicts[0]['name']);
+        self::assertStringContainsString('OneClass.php', $conflicts[0]['previous']);
+        self::assertStringContainsString('OneInterface.php', $conflicts[0]['current']);
+    }
+
+    public function testSetClassWithTheSameFileIsNotAConflict() : void
+    {
+        $this->autoloader->withConflictDetection();
+        $this->autoloader->setClass('Same', __DIR__ . '/support/OneClass.php');
+        $this->autoloader->setClass('Same', __DIR__ . '/support/OneClass.php');
+        self::assertSame([], $this->autoloader->getConflicts());
+    }
+
+    public function testConflictHandlerIsCalledAsConflictsHappen() : void
+    {
+        $seen = [];
+        $this->autoloader->withConflictDetection(
+            true,
+            static function (array $conflict) use (&$seen) : void {
+                $seen[] = $conflict['type'] . ':' . $conflict['name'];
+            }
+        );
+        $this->autoloader->setNamespace('Dup', __DIR__);
+        $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
+        $this->autoloader->setClass('Dup', __DIR__ . '/support/OneClass.php');
+        $this->autoloader->setClass('Dup', __DIR__ . '/support/OneTrait.php');
+        self::assertSame(['namespace:Dup', 'class:Dup'], $seen);
+    }
+
+    public function testClearConflictsKeepsDetectionOn() : void
+    {
+        $this->autoloader->withConflictDetection();
+        $this->autoloader->setNamespace('Dup', __DIR__);
+        $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
+        self::assertCount(1, $this->autoloader->getConflicts());
+        $this->autoloader->clearConflicts();
+        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertTrue($this->autoloader->isDetectingConflicts());
+    }
+
+    public function testDisablingDetectionDiscardsRecordedConflicts() : void
+    {
+        $this->autoloader->withConflictDetection();
+        $this->autoloader->setNamespace('Dup', __DIR__);
+        $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
+        self::assertCount(1, $this->autoloader->getConflicts());
+        $this->autoloader->withConflictDetection(false);
+        self::assertSame([], $this->autoloader->getConflicts());
+    }
 }
