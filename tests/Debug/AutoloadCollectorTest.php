@@ -103,7 +103,7 @@ final class AutoloadCollectorTest extends TestCase
     public function testPreload() : void
     {
         $collector = new class() extends AutoloadCollector {
-            protected function getOpcacheConfiguration() : ?array
+            protected function getOpcacheConfiguration() : array
             {
                 return [
                     'directives' => [
@@ -137,7 +137,7 @@ final class AutoloadCollectorTest extends TestCase
     public function testPreloadNotSet() : void
     {
         $collector = new class() extends AutoloadCollector {
-            protected function getOpcacheConfiguration() : ?array
+            protected function getOpcacheConfiguration() : array
             {
                 return [];
             }

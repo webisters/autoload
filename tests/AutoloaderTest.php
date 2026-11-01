@@ -118,7 +118,7 @@ final class AutoloaderTest extends TestCase
         self::assertFalse($this->autoloader->isDetectingConflicts());
         $this->autoloader->setNamespace('Dup', __DIR__);
         $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
-        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertCount(0, $this->autoloader->getConflicts());
     }
 
     public function testWithConflictDetectionTogglesTheFlag() : void
@@ -135,7 +135,7 @@ final class AutoloaderTest extends TestCase
     {
         $this->autoloader->withConflictDetection();
         $this->autoloader->setNamespace('Dup', __DIR__);
-        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertCount(0, $this->autoloader->getConflicts());
         $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
         $conflicts = $this->autoloader->getConflicts();
         self::assertCount(1, $conflicts);
@@ -155,7 +155,7 @@ final class AutoloaderTest extends TestCase
         $this->autoloader->withConflictDetection();
         $this->autoloader->setNamespace('Same', __DIR__);
         $this->autoloader->setNamespace('Same', __DIR__);
-        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertCount(0, $this->autoloader->getConflicts());
     }
 
     public function testAddNamespaceWithADuplicateDirectoryIsReported() : void
@@ -163,7 +163,7 @@ final class AutoloaderTest extends TestCase
         $this->autoloader->withConflictDetection();
         $this->autoloader->addNamespace('Dup', __DIR__);
         $this->autoloader->addNamespace('Dup', __DIR__ . '/support');
-        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertCount(0, $this->autoloader->getConflicts());
         $this->autoloader->addNamespace('Dup', __DIR__);
         $conflicts = $this->autoloader->getConflicts();
         self::assertCount(1, $conflicts);
@@ -175,7 +175,7 @@ final class AutoloaderTest extends TestCase
     {
         $this->autoloader->withConflictDetection();
         $this->autoloader->setClass('Dup', __DIR__ . '/support/OneClass.php');
-        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertCount(0, $this->autoloader->getConflicts());
         $this->autoloader->setClass('Dup', __DIR__ . '/support/OneInterface.php');
         $conflicts = $this->autoloader->getConflicts();
         self::assertCount(1, $conflicts);
@@ -190,7 +190,7 @@ final class AutoloaderTest extends TestCase
         $this->autoloader->withConflictDetection();
         $this->autoloader->setClass('Same', __DIR__ . '/support/OneClass.php');
         $this->autoloader->setClass('Same', __DIR__ . '/support/OneClass.php');
-        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertCount(0, $this->autoloader->getConflicts());
     }
 
     public function testConflictHandlerIsCalledAsConflictsHappen() : void
@@ -216,7 +216,7 @@ final class AutoloaderTest extends TestCase
         $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
         self::assertCount(1, $this->autoloader->getConflicts());
         $this->autoloader->clearConflicts();
-        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertCount(0, $this->autoloader->getConflicts());
         self::assertTrue($this->autoloader->isDetectingConflicts());
     }
 
@@ -227,7 +227,7 @@ final class AutoloaderTest extends TestCase
         $this->autoloader->setNamespace('Dup', __DIR__ . '/support');
         self::assertCount(1, $this->autoloader->getConflicts());
         $this->autoloader->withConflictDetection(false);
-        self::assertSame([], $this->autoloader->getConflicts());
+        self::assertCount(0, $this->autoloader->getConflicts());
     }
 
     public function testSetClassesValidatesPathsByDefault() : void

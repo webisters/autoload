@@ -54,6 +54,27 @@ jobs:
           fi
           echo "All supported PHP versions passed."
 
+  phpstan:
+    name: phpstan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: intl, sodium, gd, mysqli, curl, fileinfo, json, dom, simplexml, mbstring, zip
+          coverage: none
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Static analysis
+        run: |
+          if [ -f vendor/bin/phpstan ]; then
+            vendor/bin/phpstan analyse --no-progress
+          else
+            echo "phpstan not installed; skipping."
+          fi
+
   lint:
     name: lint
     runs-on: ubuntu-latest
